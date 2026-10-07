@@ -1,0 +1,311 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+public class PieceSpawner : MonoBehaviour
+{
+    [SerializeField] private int maxPieces = 20;
+    private int piecesSpawned = 0;
+    [SerializeField] private QueueUI queueUI;
+    [SerializeField] private GameObject piecePrefab;
+
+    [Header("Normal Piece Sprites")]
+    [SerializeField] private Sprite[] normalSprites;
+    [Header("Special Piece Sprites")]
+    [SerializeField] private Sprite gitRevertSprite;
+    [SerializeField] private Sprite gitRestoreSprite;
+    [SerializeField] private Sprite k8sReplicateSprite;
+    [SerializeField] private Sprite pytorchTrainSprite;
+
+    [System.Serializable]
+    public class QueuedPiece
+    {
+        public Sprite sprite;
+        public Piece.PieceType type;
+
+        public QueuedPiece(Sprite sprite, Piece.PieceType type)
+        {
+            this.sprite = sprite;
+            this.type = type;
+        }
+    }
+
+    private List<QueuedPiece> pieceQueue = new List<QueuedPiece>();
+    private List<QueuedPiece> placedHistory = new List<QueuedPiece>();
+
+    private GameObject currentPiece;
+
+    private void Start()
+    {
+        CreateQueue();
+        UpdateQueueUI();
+        SpawnPiece();
+    }
+
+    private void UpdateQueueUI()
+    {
+        if (queueUI == null)
+            return;
+
+        queueUI.UpdateQueue(pieceQueue.ToArray());
+    }
+
+    private void CreateQueue()
+    {
+        pieceQueue.Clear();
+
+        for (int i = 0; i < 6; i++)
+        {
+            pieceQueue.Add(CreateRandomPiece());
+        }
+    }
+
+    private QueuedPiece CreateRandomPiece()
+    {
+        // 10% chance of a special piece
+        if (true)
+        {
+            int special = 2;
+
+            switch (special)
+            {
+                case 0:
+                    return new QueuedPiece(
+                        gitRevertSprite,
+                        Piece.PieceType.GitRevert
+                    );
+
+                case 1:
+                    return new QueuedPiece(
+                        gitRestoreSprite,
+                        Piece.PieceType.GitRestore
+                    );
+
+                case 2:
+                    return new QueuedPiece(
+                        k8sReplicateSprite,
+                        Piece.PieceType.K8sReplicate
+                    );
+
+                case 3:
+                    return new QueuedPiece(
+                        pytorchTrainSprite,
+                        Piece.PieceType.PytorchTrain
+                    );
+            }
+        }
+
+        return new QueuedPiece(
+            GetRandomNormalSprite(),
+            Piece.PieceType.Normal
+        );
+    }
+
+    private Sprite GetRandomNormalSprite()
+    {
+        if (normalSprites == null || normalSprites.Length == 0)
+        {
+            Debug.LogError("PieceSpawner: No normal sprites assigned!");
+            return null;
+        }
+
+        int index = Random.Range(0, normalSprites.Length);
+        return normalSprites[index];
+    }
+
+    public void SpawnPiece()
+    {
+        if (piecePrefab == null)
+        {
+            Debug.LogError("PieceSpawner: No piece prefab assigned!");
+            return;
+        }
+
+        if (pieceQueue.Count == 0)
+        {
+            Debug.Log("No more pieces in queue.");
+            return;
+        }
+
+        if (piecesSpawned >= maxPieces)
+        {
+            Debug.Log("20 pieces have been spawned. Game over / level complete.");
+            return;
+        }
+
+        QueuedPiece nextPiece = pieceQueue[0];
+
+        currentPiece = Instantiate(
+            piecePrefab,
+            transform.position,
+            Quaternion.identity
+        );
+        piecesSpawned++;
+
+        Piece piece = currentPiece.GetComponent<Piece>();
+
+        if (piece != null)
+        {
+            piece.Initialize(
+                nextPiece.sprite,
+                nextPiece.type
+            );
+        }
+
+        pieceQueue.RemoveAt(0);
+
+        pieceQueue.Add(CreateRandomPiece());
+        UpdateQueueUI();
+
+        PieceController pieceController =
+            currentPiece.GetComponent<PieceController>();
+
+        if (pieceController != null)
+        {
+            pieceController.SetSpawner(this);
+        }
+
+        Debug.Log(
+            "Spawned: " +
+            nextPiece.sprite.name +
+            " | Type: " +
+            nextPiece.type
+        );
+    }
+
+    public void PieceSettled()
+    {
+        Piece piece = currentPiece.GetComponent<Piece>();
+
+        if (piece != null)
+        {
+            // Remember what was just placed
+            QueuedPiece placedPiece = new QueuedPiece(
+                piece.GetComponent<SpriteRenderer>().sprite,
+                piece.Type
+            );
+
+            placedHistory.Add(placedPiece);
+
+            // Keep only the last 3
+            if (placedHistory.Count > 3)
+            {
+                placedHistory.RemoveAt(0);
+            }
+        }
+
+        Debug.Log("Spawner: Current piece settled. Spawning next piece.");
+        SpawnPiece();
+    }
+
+    public void GitRevert()
+    {
+        if (placedHistory.Count == 0)
+        {
+            Debug.Log("Git Revert: Nothing to revert.");
+            return;
+        }
+
+        Debug.Log("Git Revert activated!");
+
+        // Put the last 3 placed pieces back at the front of the queue
+        for (int i = placedHistory.Count - 1; i >= 0; i--)
+        {
+            pieceQueue.Insert(0, placedHistory[i]);
+        }
+
+        placedHistory.Clear();
+
+        // Keep queue at 6 slots
+        while (pieceQueue.Count > 6)
+        {
+            pieceQueue.RemoveAt(pieceQueue.Count - 1);
+        }
+
+        UpdateQueueUI();
+    }
+
+    public void GitRestore()
+    {
+        Debug.Log("Git Restore activated!");
+
+        if (currentPiece != null)
+        {
+            Destroy(currentPiece);
+            currentPiece = null;
+        }
+    }
+
+    public void K8sReplicate()
+    {
+        Debug.Log("K8s Replicate activated!");
+
+        int count = Mathf.Min(3, pieceQueue.Count);
+
+        List<QueuedPiece> copies = new List<QueuedPiece>();
+
+        for (int i = 0; i < count; i++)
+        {
+            copies.Add(
+                new QueuedPiece(
+                    pieceQueue[i].sprite,
+                    pieceQueue[i].type
+                )
+            );
+        }
+
+        // Put the copies immediately after the original 3.
+        for (int i = 0; i < copies.Count; i++)
+        {
+            pieceQueue.Insert(3 + i, copies[i]);
+        }
+
+        // Keep the visible queue at 6 pieces.
+        while (pieceQueue.Count > 6)
+        {
+            pieceQueue.RemoveAt(6);
+        }
+
+        UpdateQueueUI();
+    }
+
+    public void PytorchTrain()
+{
+    Debug.Log("Pytorch Train activated!");
+
+    int count = Mathf.Min(3, pieceQueue.Count);
+
+    // Fisher-Yates shuffle for the first 3 pieces
+    for (int i = count - 1; i > 0; i--)
+    {
+        int randomIndex = Random.Range(0, i + 1);
+
+        QueuedPiece temp = pieceQueue[i];
+        pieceQueue[i] = pieceQueue[randomIndex];
+        pieceQueue[randomIndex] = temp;
+    }
+
+    UpdateQueueUI();
+}
+
+    public void ActivateSpecial(Piece.PieceType type)
+    {
+        switch (type)
+        {
+            case Piece.PieceType.GitRevert:
+                GitRevert();
+                break;
+
+            case Piece.PieceType.GitRestore:
+                GitRestore();
+                break;
+
+            case Piece.PieceType.K8sReplicate:
+                K8sReplicate();
+                break;
+
+            case Piece.PieceType.PytorchTrain:
+                PytorchTrain();
+                break;
+        }
+    }
+}

@@ -1,0 +1,115 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+public class PieceSpawner : MonoBehaviour
+{
+    [SerializeField] private int maxPieces = 20;
+    private int piecesSpawned = 0;
+    [SerializeField] private QueueUI queueUI;
+    [SerializeField] private GameObject piecePrefab;
+
+    [Header("Normal Piece Sprites")]
+    [SerializeField] private Sprite[] normalSprites;
+
+    private List<Sprite> pieceQueue = new List<Sprite>();
+
+    private GameObject currentPiece;
+
+    private void Start()
+    {
+        CreateQueue();
+        UpdateQueueUI();
+        SpawnPiece();
+    }
+
+    private void UpdateQueueUI()
+    {
+        if (queueUI == null)
+            return;
+
+        queueUI.UpdateQueue(pieceQueue.ToArray());
+    }
+
+    private void CreateQueue()
+    {
+        pieceQueue.Clear();
+
+        for (int i = 0; i < 6; i++)
+        {
+            pieceQueue.Add(GetRandomNormalSprite());
+        }
+    }
+
+    private Sprite GetRandomNormalSprite()
+    {
+        if (normalSprites == null || normalSprites.Length == 0)
+        {
+            Debug.LogError("PieceSpawner: No normal sprites assigned!");
+            return null;
+        }
+
+        int index = Random.Range(0, normalSprites.Length);
+        return normalSprites[index];
+    }
+
+    public void SpawnPiece()
+    {
+        if (piecePrefab == null)
+        {
+            Debug.LogError("PieceSpawner: No piece prefab assigned!");
+            return;
+        }
+
+        if (pieceQueue.Count == 0)
+        {
+            Debug.Log("No more pieces in queue.");
+            return;
+        }
+
+        if (piecesSpawned >= maxPieces)
+        {
+            Debug.Log("20 pieces have been spawned. Game over / level complete.");
+            return;
+        }
+
+        Sprite nextSprite = pieceQueue[0];
+
+        currentPiece = Instantiate(
+            piecePrefab,
+            transform.position,
+            Quaternion.identity
+        );
+        piecesSpawned++;
+
+        Piece piece = currentPiece.GetComponent<Piece>();
+
+        if (piece != null)
+        {
+            piece.Initialize(
+                nextSprite,
+                Piece.PieceType.Normal
+            );
+        }
+
+        pieceQueue.RemoveAt(0);
+
+        pieceQueue.Add(GetRandomNormalSprite());
+        UpdateQueueUI();
+
+        PieceController pieceController =
+            currentPiece.GetComponent<PieceController>();
+
+        if (pieceController != null)
+        {
+            pieceController.SetSpawner(this);
+        }
+
+        Debug.Log("Spawned: " + nextSprite.name);
+    }
+
+    public void PieceSettled()
+    {
+        Debug.Log("Spawner: Current piece settled. Spawning next piece.");
+        SpawnPiece();
+    }
+}
