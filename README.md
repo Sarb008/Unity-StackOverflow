@@ -66,4 +66,7 @@ Developed as part of the **VIT Chennai OSPC Club**.
 
 ## Project
 
+## Play the Game
+
+[Download the Windows Build](https://github.com/Sarb008/Unity-StackOverflow/releases/tag/v1.0.0)
 StackOverflow was developed as a complete Unity game with a full gameplay loop, menus, progression, persistence, and game-over flow.
